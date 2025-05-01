@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Group Library{% endblock %}
+
+{% block content %}
+<h1>Group Library</h1>
+
+{# Set variables needed for the 'Create New Group' form #}
+{% set action_url = url_for('groups_library') %}
+{% set button_text = 'Create New Group' %}
+{# Explicitly set group to None for the create context #}
+{% set group = none %}
+{# Now include the form - it will use the variables set above #}
+{% include '_form_group.html' %} {# Line 11 (approx) after sets #}
+
+<hr>
+
+<h2>Existing Groups ({{ groups|length }})</h2>
+{% if groups %}
+<ul class="list-group library-list">
+    {% for group_item in groups %} {# Changed loop variable #}
+    <li class="list-group-item">
+        <div>
+            <span class="fw-bold">{{ group_item.icon }} {{ group_item.name }}</span>
+            <small class="text-muted">({{ group_item.step_associations|length }} steps, {{ group_item.get_total_time() }} min)</small>
+            {% if group_item.description %} <br><small class="text-muted fst-italic">{{ group_item.description }}</small>{% endif %}
+            {% if group_item.tags %} <br><small>{% for tag in group_item.tags.split(',') %}<span class="badge bg-info text-dark me-1">{{tag.strip()}}</span>{% endfor %}</small>{% endif %}
+            {# List steps within the group preview #}
+            {% if group_item.step_associations %}
+                <ul class="list-unstyled mt-1">
+                {% for assoc in group_item.step_associations %}
+                     {# Check if assoc.step exists, as deletion might cause issues otherwise #}
+                     {% if assoc.step %}
+                    <li class="group-item-step"><small>{{ loop.index }}. {{ assoc.step.icon }} {{ assoc.step.name }} {% if assoc.step.estimated_time %}({{ assoc.step.estimated_time }} min){% endif %}</small></li>
+                    {% else %}
+                    <li class="group-item-step"><small>{{ loop.index }}. [Deleted Step]</small></li>
+                    {% endif %}
+                {% endfor %}
+                </ul>
+            {% endif %}
+        </div>
+        <div class="actions">
+            <a href="{{ url_for('edit_group', group_id=group_item.id) }}" class="btn btn-sm btn-outline-secondary">
+               <i class="bi bi-pencil"></i> Edit Steps/Details
+            </a>
+            <form action="{{ url_for('delete_group', group_id=group_item.id) }}" method="POST" onsubmit="return confirm('Are you sure you want to delete the group \'{{ group_item.name }}\'? This cannot be undone.');">
+                <button type="submit" class="btn btn-sm btn-outline-danger">
+                     <i class="bi bi-trash"></i> Delete
+                </button>
+            </form>
+        </div>
+    </li>
+    {% endfor %} {# End loop for group_item #}
+</ul>
+{% else %}
+<p class="text-muted">No groups created yet. Add one using the form above!</p>
+{% endif %}
+
+{% endblock %}

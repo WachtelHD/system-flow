@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Edit Group: {{ group.name }}{% endblock %}
+
+{% block content %}
+<h1>Edit Group: {{ group.name }}</h1>
+
+{# --- Form for Group Details --- #}
+<form action="{{ url_for('edit_group', group_id=group.id) }}" method="POST" class="mb-4 border p-3 rounded">
+    <h5>Group Details & Steps</h5>
+     <div class="mb-3">
+        <label for="name" class="form-label">Name <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="name" name="name" value="{{ group.name }}" required>
+    </div>
+    <div class="mb-3">
+        <label for="description" class="form-label">Description</label>
+        <textarea class="form-control" id="description" name="description" rows="2">{{ group.description if group.description else '' }}</textarea>
+    </div>
+     <div class="row">
+        <div class="col-md-6 mb-3">
+             <label for="icon" class="form-label">Icon (Emoji or short text)</label>
+            <input type="text" class="form-control" id="icon" name="icon" value="{{ group.icon | default('📦') }}" maxlength="10">
+        </div>
+         <div class="col-md-6 mb-3">
+            <label for="tags" class="form-label">Tags (comma-separated)</label>
+            <input type="text" class="form-control" id="tags" name="tags" value="{{ group.tags if group.tags else '' }}">
+         </div>
+    </div>
+
+    <hr>
+    <h5>Steps in this Group (Drag to Reorder)</h5>
+    <p class="small text-muted">Add steps from the 'Available Steps' list below.</p>
+    <div id="group-steps-list" class="list-group mb-3 drop-area">
+        {# Hidden inputs will hold the ordered step IDs #}
+        {% for assoc in group.step_associations %}
+        <div class="list-group-item system-item step" data-step-id="{{ assoc.step.id }}">
+             <i class="bi bi-grip-vertical handle"></i>
+             <input type="hidden" name="group_steps[]" value="{{ assoc.step.id }}">
+             <span>{{ assoc.step.icon }} {{ assoc.step.name }} {% if assoc.step.estimated_time %}({{ assoc.step.estimated_time }} min){% endif %}</span>
+             <button type="button" class="btn btn-sm btn-outline-danger float-end remove-step-btn">Remove</button>
+        </div>
+        {% endfor %}
+    </div>
+
+     <button type="submit" class="btn btn-primary">Save Changes to Group</button>
+     <a href="{{ url_for('groups_library') }}" class="btn btn-secondary">Cancel</a>
+</form>
+
+
+<hr>
+
+{# --- Available Steps to Add --- #}
+<h5>Available Steps</h5>
+ <div id="available-steps-list" class="list-group">
+    {% for step in all_steps %}
+        {% if step.id not in group_step_ids %} {# Only show steps not already in the group #}
+        <div class="list-group-item list-group-item-action available-item" data-step-id="{{ step.id }}" data-step-name="{{ step.name }}" data-step-icon="{{ step.icon }}" data-step-time="{{ step.estimated_time | default(0) }}">
+             {{ step.icon }} {{ step.name }} {% if step.estimated_time %}({{ step.estimated_time }} min){% endif %}
+             <button type="button" class="btn btn-sm btn-outline-success float-end add-step-btn">Add</button>
+        </div>
+         {% endif %}
+    {% endfor %}
+ </div>
+
+{% endblock %}
+
+{% block scripts %}
+{{ super() }} {# Include scripts from base.html #}
+<script>
+    const groupStepsList = document.getElementById('group-steps-list');
+    const availableStepsList = document.getElementById('available-steps-list');
+
+    // Initialize SortableJS for the group steps list
+    new Sortable(groupStepsList, {
+        animation: 150,
+        ghostClass: 'bg-light',
+        handle: '.handle', // Use the handle for dragging
+        onEnd: function (evt) {
+            // Update hidden inputs after reordering (optional but good practice)
+            // The form submission relies on the order in the DOM anyway
+            const items = groupStepsList.querySelectorAll('.list-group-item');
+            items.forEach((item, index) => {
+                 // You could update an 'order' input if needed, but the name="group_steps[]"
+                 // list submitted will reflect the DOM order automatically on form submit.
+            });
+        }
+    });
+
+    // Function to create a step item element for the group list
+    function createGroupStepElement(id, icon, name, time) {
+        const div = document.createElement('div');
+        div.className = 'list-group-item system-item step';
+        div.dataset.stepId = id;
+        div.innerHTML = `
+            <i class="bi bi-grip-vertical handle"></i>
+            <input type="hidden" name="group_steps[]" value="${id}">
+            <span>${icon} ${name} ${time > 0 ? '(' + time + ' min)' : ''}</span>
+            <button type="button" class="btn btn-sm btn-outline-danger float-end remove-step-btn">Remove</button>
+        `;
+        // Add event listener to the new remove button
+        div.querySelector('.remove-step-btn').addEventListener('click', handleRemoveClick);
+        return div;
+    }
+
+     // Function to create an available step element
+    function createAvailableStepElement(id, icon, name, time) {
+        const div = document.createElement('div');
+        div.className = 'list-group-item list-group-item-action available-item';
+        div.dataset.stepId = id;
+        div.dataset.stepName = name;
+        div.dataset.stepIcon = icon;
+        div.dataset.stepTime = time;
+         div.innerHTML = `
+            ${icon} ${name} ${time > 0 ? '(' + time + ' min)' : ''}
+            <button type="button" class="btn btn-sm btn-outline-success float-end add-step-btn">Add</button>
+        `;
+        // Add event listener to the new add button
+        div.querySelector('.add-step-btn').addEventListener('click', handleAddClick);
+        return div;
+    }
+
+
+    // Event delegation for adding steps
+    availableStepsList.addEventListener('click', handleAddClick);
+
+    function handleAddClick(event) {
+         if (event.target.classList.contains('add-step-btn')) {
+            const availableItem = event.target.closest('.available-item');
+            if (availableItem) {
+                const stepId = availableItem.dataset.stepId;
+                const stepName = availableItem.dataset.stepName;
+                const stepIcon = availableItem.dataset.stepIcon;
+                const stepTime = availableItem.dataset.stepTime;
+
+                // Create the new element for the group list
+                const newGroupStepElement = createGroupStepElement(stepId, stepIcon, stepName, stepTime);
+
+                // Append to the group steps list
+                groupStepsList.appendChild(newGroupStepElement);
+
+                // Remove from available list
+                availableItem.remove();
+            }
+         }
+    }
+
+    // Event delegation for removing steps
+    groupStepsList.addEventListener('click', handleRemoveClick);
+
+    function handleRemoveClick(event) {
+         if (event.target.classList.contains('remove-step-btn')) {
+            const groupItem = event.target.closest('.list-group-item');
+             if (groupItem) {
+                const stepId = groupItem.dataset.stepId;
+
+                 // Find the original step data (might need to fetch or store it better)
+                 // For now, let's assume we can recreate it simply
+                 const stepIcon = groupItem.querySelector('span').textContent.split(' ')[0]; // Crude extraction
+                 const stepNameAndTime = groupItem.querySelector('span').textContent.substring(stepIcon.length).trim();
+                 const stepNameMatch = stepNameAndTime.match(/^(.*?)(?:\s\((\d+)\smin\))?$/);
+                 const stepName = stepNameMatch ? stepNameMatch[1] : 'Unknown Step';
+                 const stepTime = stepNameMatch && stepNameMatch[2] ? parseInt(stepNameMatch[2]) : 0;
+
+
+                 // Create the element to add back to available list
+                const newAvailableStepElement = createAvailableStepElement(stepId, stepIcon, stepName, stepTime);
+
+                // Add back to available list (could sort later if needed)
+                availableStepsList.appendChild(newAvailableStepElement);
+
+                // Remove from group list
+                groupItem.remove();
+            }
+         }
+    }
+
+</script>
+{% endblock %}

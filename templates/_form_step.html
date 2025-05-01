@@ -1,0 +1,33 @@
+{# Pass 'step' object for editing, None for creating #}
+{# Pass 'action_url' for the form's action attribute #}
+{# Pass 'button_text' for the submit button label #}
+
+<form action="{{ action_url }}" method="POST" class="mb-4 border p-3 rounded">
+    <h5>{{ button_text }} Step</h5>
+    <div class="mb-3">
+        <label for="name" class="form-label">Name <span class="text-danger">*</span></label>
+        <input type="text" class="form-control" id="name" name="name" value="{{ step.name if step else '' }}" required>
+    </div>
+    <div class="mb-3">
+        <label for="description" class="form-label">Description</label>
+        <textarea class="form-control" id="description" name="description" rows="2">{{ step.description if step else '' }}</textarea>
+    </div>
+    <div class="row">
+        <div class="col-md-6 mb-3">
+            <label for="estimated_time" class="form-label">Estimated Time (minutes)</label>
+            <input type="number" class="form-control" id="estimated_time" name="estimated_time" value="{{ step.estimated_time if step and step.estimated_time is not none else '' }}" min="0">
+        </div>
+        <div class="col-md-6 mb-3">
+            <label for="icon" class="form-label">Icon (Emoji or short text)</label>
+            <input type="text" class="form-control" id="icon" name="icon" value="{{ step.icon if step else '➡️' }}" maxlength="10">
+        </div>
+    </div>
+    <div class="mb-3">
+        <label for="tags" class="form-label">Tags (comma-separated)</label>
+        <input type="text" class="form-control" id="tags" name="tags" value="{{ step.tags if step else '' }}">
+    </div>
+    <button type="submit" class="btn btn-primary">{{ button_text }}</button>
+     {% if step %}
+     <button type="button" class="btn btn-secondary" data-bs-toggle="collapse" data-bs-target="#editStepForm{{ step.id }}">Cancel</button>
+     {% endif %}
+</form>

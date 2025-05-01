@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% block title %}{{ system_name }} System Editor{% endblock %}
+
+{% block content %}
+<h1>{{ system_name }} System Editor</h1>
+<p>Total Estimated Time: <strong id="total-time">{{ total_time }} min</strong></p>
+
+<div class="row">
+    {# System Flow Column #}
+    <div class="col-md-7">
+        <form action="{{ url_for('system_editor', system_name=system_name) }}" method="POST">
+            <h5>System Flow (Drag to Reorder)</h5>
+            <p class="small text-muted">Drag items from the Libraries on the right to add them here.</p>
+             <div id="system-items-list" class="list-group drop-area mb-3">
+                 {% for item in system_items %}
+                    <div class="list-group-item system-item {{ item.type }}" data-item-id="{{ item.id }}" data-item-type="{{ item.type }}" data-item-identifier="{{ item.identifier }}" data-item-time="{{ item.time }}">
+                         <i class="bi bi-grip-vertical handle"></i>
+                         <input type="hidden" name="system_items[]" value="{{ item.identifier }}">
+                         <span>{{ item.icon }} {{ item.name }} {% if item.time %}({{ item.time }} min){% endif %}</span>
+                         {% if item.type == 'group' %}<span class="badge bg-primary ms-2">Group</span>{% endif %}
+                         <button type="button" class="btn btn-sm btn-outline-danger float-end remove-item-btn">Remove</button>
+                    </div>
+                 {% endfor %}
+             </div>
+             <button type="submit" class="btn btn-primary">Save {{ system_name }} System</button>
+             <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+        </form>
+    </div>
+
+    {# Libraries Column #}
+    <div class="col-md-5">
+        <h5>Available Steps</h5>
+        <div id="available-steps-list" class="list-group mb-3" style="max-height: 250px; overflow-y: auto;">
+            {% for step in available_steps %}
+                <div class="list-group-item list-group-item-action available-item"
+                     data-item-id="{{ step.id }}"
+                     data-item-type="step"
+                     data-item-name="{{ step.name }}"
+                     data-item-icon="{{ step.icon }}"
+                     data-item-time="{{ step.estimated_time | default(0) }}"
+                     data-item-identifier="step-{{ step.id }}"
+                     draggable="true" title="Drag me to the System Flow">
+                    {{ step.icon }} {{ step.name }} {% if step.estimated_time %}({{ step.estimated_time }} min){% endif %}
+                </div>
+            {% endfor %}
+        </div>
+
+         <h5>Available Groups</h5>
+        <div id="available-groups-list" class="list-group" style="max-height: 250px; overflow-y: auto;">
+             {% for group in available_groups %}
+                <div class="list-group-item list-group-item-action available-item"
+                     data-item-id="{{ group.id }}"
+                     data-item-type="group"
+                     data-item-name="{{ group.name }}"
+                     data-item-icon="{{ group.icon }}"
+                     data-item-time="{{ group.get_total_time() }}"
+                     data-item-identifier="group-{{ group.id }}"
+                     draggable="true" title="Drag me to the System Flow">
+                     {{ group.icon }} {{ group.name }} ({{ group.get_total_time() }} min) <span class="badge bg-primary ms-2">Group</span>
+                </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+
+{% block scripts %}
+{{ super() }} {# Include scripts from base.html #}
+<script>
+    const systemItemsList = document.getElementById('system-items-list');
+    const availableStepsList = document.getElementById('available-steps-list');
+    const availableGroupsList = document.getElementById('available-groups-list');
+    const totalTimeElement = document.getElementById('total-time');
+
+    function calculateAndUpdateTotalTime() {
+        let total = 0;
+        const items = systemItemsList.querySelectorAll('.system-item');
+        items.forEach(item => {
+            total += parseInt(item.dataset.itemTime || 0);
+        });
+        totalTimeElement.textContent = `${total} min`;
+    }
+
+     // Function to create a system item element
+    function createSystemItemElement(id, type, name, icon, time, identifier) {
+        const div = document.createElement('div');
+        div.className = `list-group-item system-item ${type}`; // 'step' or 'group'
+        div.dataset.itemId = id;
+        div.dataset.itemType = type;
+        div.dataset.itemName = name; // Store for potential reuse if removed
+        div.dataset.itemIcon = icon;
+        div.dataset.itemTime = time;
+        div.dataset.itemIdentifier = identifier;
+        div.innerHTML = `
+            <i class="bi bi-grip-vertical handle"></i>
+            <input type="hidden" name="system_items[]" value="${identifier}">
+            <span>${icon} ${name} ${time > 0 ? '(' + time + ' min)' : ''}</span>
+            ${type === 'group' ? '<span class="badge bg-primary ms-2">Group</span>' : ''}
+            <button type="button" class="btn btn-sm btn-outline-danger float-end remove-item-btn">Remove</button>
+        `;
+        // Add event listener to the new remove button
+        div.querySelector('.remove-item-btn').addEventListener('click', handleRemoveClick);
+        return div;
+    }
+
+     // Initialize SortableJS for the main system list (receiving drops)
+    new Sortable(systemItemsList, {
+        group: {
+            name: 'system',
+            put: ['available-items'] // Allow drops from 'available-items' group
+        },
+        animation: 150,
+        ghostClass: 'bg-light',
+        handle: '.handle',
+        onAdd: function (evt) {
+             // When an item is dropped from available lists
+            const originalItem = evt.item; // The item from the available list
+            const newItemData = originalItem.dataset;
+
+            // Create the real element to stay in the system list
+            const newSystemElement = createSystemItemElement(
+                newItemData.itemId,
+                newItemData.itemType,
+                newItemData.itemName,
+                newItemData.itemIcon,
+                newItemData.itemTime,
+                newItemData.itemIdentifier
+            );
+
+            // Replace the dropped placeholder with the styled element
+            evt.item.replaceWith(newSystemElement);
+             calculateAndUpdateTotalTime(); // Update time on add
+        },
+         onUpdate: function (evt) {
+            // Fired when sorting within the list occurs
+             calculateAndUpdateTotalTime(); // Recalculate just in case (shouldn't change time)
+        },
+        onRemove: function(evt) {
+             // Fired when item dragged *out* - we handle removal via button click instead
+             calculateAndUpdateTotalTime();
+        }
+    });
+
+    // Initialize SortableJS for the available steps list (source)
+    new Sortable(availableStepsList, {
+        group: {
+            name: 'available-items',
+            pull: 'clone', // Clone items when dragging out
+            put: false // Do not allow dropping items here
+        },
+        sort: false, // Do not allow sorting within the available list
+        animation: 150
+    });
+
+    // Initialize SortableJS for the available groups list (source)
+     new Sortable(availableGroupsList, {
+        group: {
+            name: 'available-items',
+            pull: 'clone',
+            put: false
+        },
+        sort: false,
+        animation: 150
+    });
+
+
+     // Event delegation for removing items from the system list
+    systemItemsList.addEventListener('click', handleRemoveClick);
+
+    function handleRemoveClick(event) {
+         if (event.target.classList.contains('remove-item-btn')) {
+            const systemItem = event.target.closest('.system-item');
+             if (systemItem) {
+                // Optional: Could add the item back to the correct available list
+                // This requires finding the original data and recreating the available item element.
+                // For simplicity, removing just removes it from the system for now.
+                systemItem.remove();
+                calculateAndUpdateTotalTime(); // Update time on removal
+            }
+         }
+    }
+
+     // Initial calculation on page load
+    calculateAndUpdateTotalTime();
+
+</script>
+{% endblock %}
